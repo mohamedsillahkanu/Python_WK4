@@ -1,0 +1,1719 @@
+# 📅 Week 4: Working with Time Series & Basic Aggregation for Malaria Data (Python)
+
+This week, we will:  
+✅ **Group malaria data by year/month** using `groupby()` and `agg()`  
+✅ **Create simple time-series plots** with `matplotlib.pyplot` and `pandas`  
+✅ **Compute malaria incidence rates**  
+✅ **Export results** to CSV and Excel formats
+
+---
+
+## 1️⃣ Grouping and Aggregating Malaria Data
+
+### Why Aggregate Data?
+📌 **Aggregation** allows us to summarize data at different levels (e.g., by month, year, region) to identify trends and patterns that may not be visible in raw data.
+
+### Step 1: Basic Aggregation with pandas
+
+```python
+# Load the libraries
+import pandas as pd
+import numpy as np
+
+# Load malaria dataset
+malaria_data = pd.read_csv("malaria_data.csv") 
+
+# Aggregate cases by year
+yearly_cases = malaria_data.groupby('year').agg(
+    total_cases=('cases', 'sum'),
+    avg_cases=('cases', 'mean'),
+    max_cases=('cases', 'max')
+).reset_index()
+
+print(yearly_cases) # Print 
+```
+
+#### 🔍 Explanation:
+✔ `groupby('year')` groups the data by year  
+✔ `agg()` calculates aggregate statistics for each group  
+✔ `reset_index()` converts the groupby result back to a regular DataFrame  
+
+---
+
+### Step 2: Multiple Grouping Variables
+
+```python
+# Group by both year and region
+region_yearly_stats = malaria_data.groupby(['region', 'year']).agg(
+    total_cases=('cases', 'sum'),
+    total_deaths=('deaths', 'sum')
+).reset_index()
+
+# Calculate case fatality rate
+region_yearly_stats['cfr'] = (region_yearly_stats['total_deaths'] / region_yearly_stats['total_cases']) * 100
+
+# Sort by region and year
+region_yearly_stats = region_yearly_stats.sort_values(['region', 'year'])
+
+print(region_yearly_stats)
+```
+
+#### 🔍 Explanation:
+✔ `groupby(['region', 'year'])` creates groups based on combinations of region and year  
+✔ `sort_values(['region', 'year'])` sorts the results by region, then by year  
+✔ Calculated columns can be added after aggregation  
+
+---
+
+### Step 3: Monthly Aggregation
+
+```python
+# Create a proper date column
+malaria_data['date'] = pd.to_datetime(malaria_data[['year', 'month']].assign(day=1))
+
+# Aggregate by month across all years
+monthly_pattern = malaria_data.groupby('month').agg(
+    avg_cases=('cases', 'mean'),
+    total_cases=('cases', 'sum')
+).reset_index()
+
+# Add month names
+import calendar
+monthly_pattern['month_name'] = monthly_pattern['month'].apply(lambda x: calendar.month_name[x])
+
+print(monthly_pattern)
+```
+
+#### 🔍 Explanation:
+✔ `pd.to_datetime()` creates a proper date column for time series analysis  
+✔ `groupby('month')` aggregates all data by month, regardless of year  
+✔ `calendar.month_name` is a Python method to get month names  
+
+---
+
+### Step 4: Rolling Aggregations
+
+```python
+# Create time series by date
+time_series = malaria_data.groupby('date')['cases'].sum().reset_index()
+time_series = time_series.rename(columns={'cases': 'total_cases'})
+time_series = time_series.sort_values('date')
+
+# Calculate 3-month rolling average
+time_series['rolling_avg'] = time_series['total_cases'].rolling(window=3).mean()
+
+print(time_series.head())
+```
+
+#### 🔍 Explanation:
+✔ `pandas` provides methods for working with time series data  
+✔ `rolling(window=3)` creates a moving window of 3 periods  
+✔ `.mean()` calculates the average over the window  
+✔ By default, the rolling function is right-aligned (like align="right" in R)  
+
+---
+
+## 2️⃣ Time Series Analysis for Malaria Data
+
+### Step 1: Simple Time Series Plots with matplotlib
+
+```python
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set style
+plt.style.use('ggplot')
+
+# Create a basic time series line plot
+plt.figure(figsize=(10, 6))
+plt.plot(time_series['date'], time_series['total_cases'], 'o-', color='darkblue', linewidth=1, markersize=2)
+plt.title('Malaria Cases Over Time')
+plt.xlabel('Date')
+plt.ylabel('Total Cases')
+plt.tight_layout()
+plt.show()
+```
+
+#### 🔍 Explanation:
+✔ `plt.plot()` creates a line plot connecting the data points  
+✔ 'o-' specifies both lines and points  
+✔ Date data on the x-axis automatically creates a time-based scale  
+
+---
+
+### Step 2: Adding Trend Lines and Smoothing
+
+```python
+import scipy.stats as stats
+
+# Add a smoothed trend line to the time series
+plt.figure(figsize=(10, 6))
+
+# Original data
+plt.plot(time_series['date'], time_series['total_cases'], color='gray', alpha=0.6, marker='o', markersize=3, linestyle='-', linewidth=1)
+
+# Add a smoothed trend line using lowess (locally weighted scatterplot smoothing)
+from statsmodels.nonparametric.smoothers_lowess import lowess
+
+# Convert dates to numeric values for lowess
+time_series['date_numeric'] = time_series['date'].astype(np.int64)
+smoothed = lowess(time_series['total_cases'], time_series['date_numeric'], frac=0.3)
+
+# Plot the smoothed line
+plt.plot(time_series['date'], smoothed[:, 1], 'r-', linewidth=2)
+
+# Add confidence interval
+plt.fill_between(
+    time_series['date'],
+    smoothed[:, 1] - 1.96 * time_series['total_cases'].std(),
+    smoothed[:, 1] + 1.96 * time_series['total_cases'].std(),
+    color='red', alpha=0.2
+)
+
+plt.title('Malaria Cases Over Time with Trend')
+plt.xlabel('Date')
+plt.ylabel('Total Cases')
+plt.figtext(0.5, 0.01, 'Red line shows smoothed trend with 95% confidence interval', 
+            wrap=True, horizontalalignment='center', fontsize=9)
+plt.tight_layout()
+plt.show()
+```
+
+#### 🔍 Explanation:
+✔ `lowess()` adds a smoothed trend line to the plot  
+✔ `frac=0.3` controls the smoothness of the lowess curve  
+✔ `fill_between()` adds a confidence interval around the trend line  
+
+---
+
+### Step 3: Comparing Multiple Time Series
+
+```python
+# Create time series by region
+region_time_series = malaria_data.groupby(['region', 'date'])['cases'].sum().reset_index()
+region_time_series = region_time_series.rename(columns={'cases': 'total_cases'})
+region_time_series = region_time_series.sort_values(['region', 'date'])
+
+# Plot multiple time series on the same chart
+plt.figure(figsize=(12, 7))
+for region in region_time_series['region'].unique():
+    data = region_time_series[region_time_series['region'] == region]
+    plt.plot(data['date'], data['total_cases'], label=region)
+
+plt.title('Malaria Cases Over Time by Region')
+plt.xlabel('Date')
+plt.ylabel('Total Cases')
+plt.legend(title='Region', loc='upper right')
+plt.tight_layout()
+plt.show()
+```
+
+#### 🔍 Explanation:
+✔ We loop through each region to create separate lines  
+✔ The legend automatically shows which color corresponds to which region  
+✔ This allows for easy comparison of patterns across different regions  
+
+---
+
+### Step 4: Using pandas and statsmodels for Time Series
+
+```python
+# Create a time series object for more advanced analysis
+yearly_ts = malaria_data.groupby('year')['cases'].sum()
+
+# Basic time series plot
+plt.figure(figsize=(10, 6))
+plt.plot(yearly_ts.index, yearly_ts.values, 'o-', color='darkred')
+plt.title('Annual Malaria Cases')
+plt.xlabel('Year')
+plt.ylabel('Cases')
+plt.tight_layout()
+plt.show()
+
+# For time series with seasonality (monthly data)
+from statsmodels.tsa.seasonal import seasonal_decompose
+
+# Group by year and month
+monthly_data = malaria_data.groupby(['year', 'month'])['cases'].sum().reset_index()
+monthly_data['date'] = pd.to_datetime(monthly_data[['year', 'month']].assign(day=1))
+monthly_data = monthly_data.set_index('date')
+monthly_ts = monthly_data['cases']
+
+# Decompose the time series if we have enough data (at least 2 years)
+if len(monthly_ts) >= 24:  # Need at least 2 years of data
+    result = seasonal_decompose(monthly_ts, model='additive', period=12)
+    
+    # Plot the decomposition
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 12))
+    
+    result.observed.plot(ax=ax1)
+    ax1.set_title('Observed')
+    
+    result.trend.plot(ax=ax2)
+    ax2.set_title('Trend')
+    
+    result.seasonal.plot(ax=ax3)
+    ax3.set_title('Seasonal')
+    
+    result.resid.plot(ax=ax4)
+    ax4.set_title('Residual')
+    
+    plt.tight_layout()
+    plt.show()
+```
+
+#### 🔍 Explanation:
+✔ `seasonal_decompose()` separates the time series into trend, seasonal, and random components  
+✔ `period=12` indicates monthly data (12 observations per year)  
+✔ This helps identify seasonal patterns in malaria cases  
+
+---
+
+## 3️⃣ Computing Malaria Incidence Rates
+
+### Why Calculate Incidence Rates?
+📌 **Incidence rates** standardize the number of cases relative to the population, allowing for fair comparisons between regions with different population sizes.
+
+### Step 1: Basic Incidence Rate Calculation
+
+```python
+# Calculate annual incidence rate per 1000 people
+annual_incidence = malaria_data.groupby('year').agg(
+    total_cases=('cases', 'sum'),
+    total_population=('population', 'sum')
+).reset_index()
+
+annual_incidence['incidence_per_1000'] = (annual_incidence['total_cases'] / annual_incidence['total_population']) * 1000
+
+print(annual_incidence)
+```
+
+#### 🔍 Explanation:
+✔ Incidence rate is calculated as (total cases / population) × 1000  
+✔ This gives the number of cases per 1000 people in the population  
+✔ The multiplier (1000) can be adjusted based on the disease prevalence  
+
+---
+
+### Step 2: Regional Incidence Comparison
+
+```python
+# Calculate incidence rates by region
+regional_incidence = malaria_data.groupby(['region', 'year']).agg(
+    total_cases=('cases', 'sum'),
+    avg_population=('population', 'mean')
+).reset_index()
+
+regional_incidence['incidence_per_1000'] = (regional_incidence['total_cases'] / regional_incidence['avg_population']) * 1000
+regional_incidence = regional_incidence.sort_values(['year', 'incidence_per_1000'], ascending=[True, False])
+
+# Find regions with highest incidence rates
+high_incidence_regions = regional_incidence.groupby('year').apply(
+    lambda x: x.nlargest(3, 'incidence_per_1000')
+).reset_index(drop=True).sort_values('year')
+
+print(high_incidence_regions)
+```
+
+#### 🔍 Explanation:
+✔ `nlargest()` selects rows with the highest values in each group  
+✔ Here we identify the top 3 regions with highest incidence rates for each year  
+✔ This helps target interventions to the most affected areas  
+
+---
+
+### Step 3: Visualizing Incidence Rates
+
+```python
+# Create a heatmap of incidence rates by region and year
+pivot_table = regional_incidence.pivot(index='region', columns='year', values='incidence_per_1000')
+
+plt.figure(figsize=(12, 8))
+sns.heatmap(pivot_table, cmap='YlOrRd', linewidths=0.5, annot=True, fmt='.1f')
+plt.title('Malaria Incidence Rate per 1000 Population')
+plt.ylabel('Region')
+plt.xlabel('Year')
+plt.tight_layout()
+plt.show()
+```
+
+#### 🔍 Explanation:
+✔ `pivot()` reshapes the data for heatmap visualization  
+✔ `sns.heatmap()` creates a heatmap visualization  
+✔ `cmap='YlOrRd'` maps colors from yellow (low) to red (high)  
+✔ This visualization quickly identifies hotspots across regions and years  
+
+---
+
+### Step 4: Age-Specific Incidence Rates
+
+```python
+# If we have age-specific data
+if 'age_group' in malaria_data.columns and 'age_population' in malaria_data.columns:
+    age_incidence = malaria_data.groupby('age_group').agg(
+        total_cases=('cases', 'sum'),
+        population=('age_population', 'sum')
+    ).reset_index()
+    
+    age_incidence['incidence_per_1000'] = (age_incidence['total_cases'] / age_incidence['population']) * 1000
+    age_incidence = age_incidence.sort_values('incidence_per_1000', ascending=False)
+    
+    # Visualize age-specific incidence
+    plt.figure(figsize=(10, 6))
+    plt.barh(age_incidence['age_group'], age_incidence['incidence_per_1000'])
+    plt.title('Malaria Incidence Rate by Age Group')
+    plt.xlabel('Incidence per 1000 Population')
+    plt.ylabel('Age Group')
+    plt.tight_layout()
+    plt.show()
+```
+
+#### 🔍 Explanation:
+✔ Age-specific incidence rates help identify vulnerable populations  
+✔ `barh()` creates horizontal bars for better visualization with longer labels  
+✔ This information can guide targeted prevention efforts  
+
+---
+
+## 4️⃣ Exporting Analysis Results
+
+### Step 1: Exporting to CSV
+
+```python
+# Write the incidence data to a CSV file
+regional_incidence.to_csv("malaria_regional_incidence.csv", index=False)
+
+# With more control 
+annual_incidence.to_csv("malaria_annual_incidence.csv", index=False, encoding='utf-8')
+```
+
+#### 🔍 Explanation:
+✔ `to_csv()` is pandas' function for exporting to CSV  
+✔ `index=False` prevents adding row numbers as a column  
+✔ `encoding='utf-8'` ensures proper character encoding  
+
+---
+
+### Step 2: Exporting to Excel
+
+```python
+# Write to Excel file
+with pd.ExcelWriter('malaria_incidence_report.xlsx') as writer:
+    annual_incidence.to_excel(writer, sheet_name='Annual Incidence', index=False)
+    regional_incidence.to_excel(writer, sheet_name='Regional Incidence', index=False)
+    high_incidence_regions.to_excel(writer, sheet_name='High Incidence Regions', index=False)
+```
+
+#### 🔍 Explanation:
+✔ `ExcelWriter()` exports data to Excel format  
+✔ Multiple sheets can be created in a single Excel file  
+✔ Each DataFrame becomes a separate worksheet with the provided name  
+
+---
+
+### Step 3: Generating Formatted Reports with Jupyter Notebooks
+
+```python
+# This would be code cells in a Jupyter Notebook
+
+# In cell 1:
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import display, Markdown, HTML
+
+# Load your data and analysis here
+malaria_data = pd.read_csv("malaria_data.csv")
+annual_incidence = malaria_data.groupby('year').agg(
+    total_cases=('cases', 'sum'),
+    total_population=('population', 'sum')
+).reset_index()
+annual_incidence['incidence_per_1000'] = (annual_incidence['total_cases'] / annual_incidence['total_population']) * 1000
+
+# In cell 2:
+display(Markdown("## Executive Summary"))
+display(Markdown("This report provides an analysis of malaria incidence across regions and time periods."))
+
+# In cell 3:
+display(Markdown("## Annual Incidence Trends"))
+
+plt.figure(figsize=(10, 6))
+plt.plot(annual_incidence['year'], annual_incidence['incidence_per_1000'], 'o-', color='blue', markersize=8, linewidth=2)
+plt.title('Annual Malaria Incidence per 1000 Population')
+plt.xlabel('Year')
+plt.ylabel('Incidence per 1000')
+plt.grid(True, alpha=0.3)
+plt.show()
+
+# In cell 4:
+display(Markdown("## Regional Comparison"))
+
+# Get the most recent year data
+latest_year = regional_incidence['year'].max()
+latest_data = regional_incidence[regional_incidence['year'] == latest_year]
+latest_data = latest_data.sort_values('incidence_per_1000', ascending=False)[['region', 'total_cases', 'incidence_per_1000']]
+
+# Format using pandas styling
+styled_table = latest_data.style.set_caption('Regional Incidence for Most Recent Year')\
+    .format({'total_cases': '{:,.0f}', 'incidence_per_1000': '{:.2f}'})\
+    .set_properties(**{'border': '1px solid gray', 'text-align': 'center'})\
+    .set_table_styles([{
+        'selector': 'th',
+        'props': [('background-color', '#f2f2f2'), ('font-weight', 'bold')]
+    }])\
+    .bar(subset=['incidence_per_1000'], color='#d65f5f')
+
+display(styled_table)
+```
+
+#### 🔍 Explanation:
+✔ Jupyter Notebooks combine code, results, and narrative text in a single document  
+✔ `display(Markdown())` allows adding formatted text  
+✔ DataFrames can be styled for better presentation  
+✔ Notebooks can be exported to multiple formats (HTML, PDF) for sharing  
+
+---
+
+### Step 4: Automated Reporting with Parameterized Notebooks
+
+```python
+# Define a function that generates reports with parameters
+def generate_regional_report(region, year=2023, output_file=None):
+    """
+    Generate a report for a specific region and year
+    
+    Parameters:
+    -----------
+    region : str
+        The region name to filter data for
+    year : int
+        The year to focus analysis on
+    output_file : str, optional
+        If provided, export the notebook to HTML
+    """
+    
+    # Filter data for this region
+    region_data = malaria_data[malaria_data['region'] == region]
+    
+    print(f"# Malaria Incidence Report for {region} Region, {year}")
+    print("\n## Key Statistics\n")
+    
+    # Calculate key statistics
+    region_stats = region_data.groupby('year').agg(
+        total_cases=('cases', 'sum'),
+        avg_monthly_cases=('cases', 'mean'),
+        total_deaths=('deaths', 'sum'),
+        total_population=('population', 'sum')
+    ).reset_index()
+    
+    # Get stats for the specified year
+    year_stats = region_stats[region_stats['year'] == year].iloc[0]
+    
+    cfr = (year_stats['total_deaths'] / year_stats['total_cases']) * 100
+    incidence = (year_stats['total_cases'] / year_stats['total_population']) * 1000
+    
+    print(f"Total Cases: {year_stats['total_cases']:,}")
+    print(f"Average Monthly Cases: {year_stats['avg_monthly_cases']:.1f}")
+    print(f"Case Fatality Rate: {cfr:.2f}%")
+    print(f"Incidence per 1000: {incidence:.2f}")
+    
+    print("\n## Trend Analysis\n")
+    
+    # Create time series plot
+    region_data['date'] = pd.to_datetime(region_data[['year', 'month']].assign(day=1))
+    trend_data = region_data.groupby('date')['cases'].sum().reset_index()
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(trend_data['date'], trend_data['cases'], 'o-', color='blue')
+    
+    # Add trend line
+    from scipy.signal import savgol_filter
+    if len(trend_data) > 5:  # Need enough data for smoothing
+        trend_data['smooth'] = savgol_filter(trend_data['cases'], 5, 1)
+        plt.plot(trend_data['date'], trend_data['smooth'], 'r-')
+        
+    plt.title(f'Malaria Cases in {region} Region')
+    plt.xlabel('Date')
+    plt.ylabel('Number of Cases')
+    plt.grid(True, alpha=0.3)
+    plt.show()
+    
+    print("\n## Seasonal Pattern\n")
+    
+    # Create seasonal plot
+    seasonal = region_data.groupby('month')['cases'].mean().reset_index()
+    seasonal['month_name'] = seasonal['month'].apply(lambda x: calendar.month_name[x])
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(seasonal['month'], seasonal['cases'], 'o-')
+    plt.xticks(seasonal['month'], [calendar.month_abbr[m] for m in seasonal['month']])
+    plt.title(f'Seasonal Pattern in {region} Region')
+    plt.xlabel('Month')
+    plt.ylabel('Average Cases')
+    plt.grid(True, alpha=0.3)
+    plt.show()
+    
+    print("\n## Recommendations\n")
+    
+    peak_month = seasonal.loc[seasonal['cases'].idxmax(), 'month_name']
+    
+    print(f"1. Intensify prevention efforts in {peak_month}.")
+    print("2. Focus on areas with population density > 1000 people per sq km.")
+    print("3. Strengthen case management to reduce the case fatality rate.")
+    
+    # Export to HTML if requested
+    if output_file:
+        # This would require additional setup with nbconvert
+        pass
+
+# To generate reports for all regions (this would be run in a separate notebook cell)
+regions = malaria_data['region'].unique()
+
+for region in regions:
+    print(f"Generating report for {region}...")
+    generate_regional_report(region, year=2023, 
+                           output_file=f"reports/malaria_report_{region.lower().replace(' ', '_')}.html")
+    print("Done!\n")
+```
+
+#### 🔍 Explanation:
+✔ Parameterized functions allow creating customized reports for different regions or time periods  
+✔ The function takes parameters like region name and year  
+✔ Python's f-strings allow easy insertion of variables into text  
+✔ This approach can generate region-specific or time-specific reports automatically  
+
+---
+
+## ✅ Summary of Week 4
+
+By the end of this week, you should be able to:  
+✔ **Group and aggregate malaria data** by different dimensions (time, region, etc.)  
+✔ **Create and interpret time series visualizations** to identify trends  
+✔ **Calculate and analyze incidence rates** to compare disease burden across populations  
+✔ **Export analysis results** in various formats for sharing and reporting
+
+---
+
+# 📌 Week 4: Exercises – Working with Time Series & Basic Aggregation
+
+These exercises will help you practice grouping data, analyzing time series, calculating incidence rates, and exporting your results in various formats.
+
+---
+
+## 1️⃣ Data Grouping and Aggregation
+
+### Exercise 1.1: Basic Aggregation
+🔹 **Using the `malaria_surveillance` dataset, complete the following tasks:**
+
+**Write the Python code to:**
+1. Calculate the total number of malaria cases per year.
+2. Determine which year had the highest average monthly cases.
+3. Calculate the total number of cases by region across all years.
+4. Find the region with the highest total case count.
+
+---
+
+### Exercise 1.2: Multi-level Aggregation
+🔹 **Group the data by multiple variables to create more detailed aggregations.**
+
+**Write the Python code to:**
+1. Create a summary table showing total cases by region and year.
+2. Calculate the year-over-year percentage change in cases for each region.
+3. Identify which month has the highest average number of cases for each region.
+4. Rank regions by total cases for each year.
+
+---
+
+### Exercise 1.3: Rolling Aggregations
+🔹 **Use pandas rolling functions to calculate rolling statistics.**
+
+**Write the Python code to:**
+1. Calculate a 3-month rolling average of cases for each region.
+2. Find the 3-month period with the highest average cases for each year.
+3. Create a visualization comparing raw monthly cases with the 3-month rolling average.
+
+---
+
+## 2️⃣ Time Series Analysis
+
+### Exercise 2.1: Basic Time Series Visualization
+🔹 **Create time series plots to visualize malaria trends.**
+
+**Write the Python code to:**
+1. Create a line plot showing monthly malaria cases over time.
+2. Add a trend line (using smoothing techniques) to identify the overall pattern.
+3. Create separate time series plots for the top 3 regions with highest cases.
+
+---
+
+### Exercise 2.2: Comparative Time Series
+🔹 **Compare malaria trends across different dimensions.**
+
+**Write the Python code to:**
+1. Create a plot showing time series for each region on the same chart (using color).
+2. Create a faceted plot showing separate time series for each region.
+3. Create a visualization comparing the seasonal pattern of cases between urban and rural areas.
+
+---
+
+### Exercise 2.3: Time Series Decomposition
+🔹 **Use the statsmodels functions for time series analysis.**
+
+**Write the Python code to:**
+1. Create a proper time series object from the monthly malaria data.
+2. Decompose the time series into trend, seasonal, and random components.
+3. Create a visualization highlighting the seasonal pattern of malaria cases.
+4. Compare the actual cases with the values predicted by the decomposition.
+
+---
+
+## 3️⃣ Computing Incidence Rates
+
+### Exercise 3.1: Basic Incidence Calculation
+🔹 **Calculate incidence rates for different time periods and regions.**
+
+**Write the Python code to:**
+1. Calculate the annual malaria incidence rate per 1000 people across all regions.
+2. Calculate incidence rates for each region by year.
+3. Create a visualization showing the trend in incidence rates over time.
+4. Identify the regions with the highest and lowest incidence rates.
+
+---
+
+### Exercise 3.2: Demographic-Specific Incidence
+🔹 **Calculate incidence rates for different demographic groups.**
+
+**Write the Python code to:**
+1. Calculate age-specific incidence rates if age data is available.
+2. Calculate gender-specific incidence rates if gender data is available.
+3. Create a visualization comparing incidence rates across different demographic groups.
+4. Identify which demographic groups have the highest risk of malaria.
+
+---
+
+### Exercise 3.3: Incidence Hotspot Detection
+🔹 **Identify areas with unusually high incidence rates.**
+
+**Write the Python code to:**
+1. Calculate the z-score of incidence rates for each region-year combination.
+2. Identify "hotspots" where incidence rates are more than 2 standard deviations above the mean.
+3. Create a heatmap visualization highlighting the hotspots over time and space.
+4. Generate a report of the top 10 hotspot region-year combinations.
+
+---
+
+## 4️⃣ Exporting Analysis Results
+
+### Exercise 4.1: Basic Data Export
+🔹 **Export your analysis results to different file formats.**
+
+**Write the Python code to:**
+1. Export the annual incidence rate table to a CSV file.
+2. Export the regional incidence rates to an Excel file with a properly formatted worksheet.
+3. Create separate worksheets in the Excel file for different years.
+
+---
+
+### Exercise 4.2: Create a Comprehensive Report
+🔹 **Use Jupyter Notebook to create a formal report of your findings.**
+
+**Create a Jupyter Notebook that:**
+1. Includes an executive summary of key findings.
+2. Shows the trend in cases and incidence rates over time with appropriate visualizations.
+3. Creates a table of the regions with the highest incidence rates.
+4. Includes a section on seasonal patterns observed in the data.
+5. Recommends periods and regions for targeted interventions based on your analysis.
+
+---
+
+### Exercise 4.3: Automated Reporting
+🔹 **Create a parameterized report that can be automatically generated for different regions.**
+
+**Write the Python code to:**
+1. Create a parameterized function that accepts a region name as input.
+2. Generate reports for each region in your dataset.
+3. Create a master report that includes summary statistics from all regions.
+
+---
+
+# 📌 Week 4: Solutions – Working with Time Series & Basic Aggregation
+
+Here are the **solutions** for Week 4 exercises:
+
+---
+
+## 1️⃣ Data Grouping and Aggregation
+
+### Exercise 1.1: Basic Aggregation
+
+```python
+# Load required packages
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the dataset
+malaria_surveillance = pd.read_csv("malaria_surveillance.csv")
+
+# Calculate total cases per year
+yearly_cases = malaria_surveillance.groupby('year')['cases'].sum().reset_index()
+yearly_cases = yearly_cases.rename(columns={'cases': 'total_cases'})
+yearly_cases = yearly_cases.sort_values('year')
+
+print(yearly_cases)
+
+# Year with highest average monthly cases
+year_avg_cases = malaria_surveillance.groupby('year')['cases'].mean().reset_index()
+year_avg_cases = year_avg_cases.rename(columns={'cases': 'avg_monthly_cases'})
+year_avg_cases = year_avg_cases.sort_values('avg_monthly_cases', ascending=False)
+
+print(f"Year with highest average monthly cases: {year_avg_cases.iloc[0]['year']} with "
+      f"{year_avg_cases.iloc[0]['avg_monthly_cases']:.2f} cases per month")
+
+# Total cases by region across all years
+region_total_cases = malaria_surveillance.groupby('region')['cases'].sum().reset_index()
+region_total_cases = region_total_cases.rename(columns={'cases': 'total_cases'})
+region_total_cases = region_total_cases.sort_values('total_cases', ascending=False)
+
+print(region_total_cases)
+
+# Region with highest case count
+print(f"Region with highest total cases: {region_total_cases.iloc[0]['region']} with "
+      f"{region_total_cases.iloc[0]['total_cases']} cases")
+```
+
+#### Explanation:
+- We use `groupby()` and aggregation functions to aggregate data by different variables
+- `sort_values()` helps sort the results to quickly identify the highest values
+- `ascending=False` is used to sort in descending order
+- The `.iloc[0]` method accesses the first row, which has the highest value after sorting
+
+---
+
+### Exercise 1.2: Multi-level Aggregation
+
+```python
+# Summary table of total cases by region and year
+region_year_cases = malaria_surveillance.groupby(['region', 'year'])['cases'].sum().reset_index()
+region_year_cases = region_year_cases.rename(columns={'cases': 'total_cases'})
+region_year_cases = region_year_cases.sort_values(['region', 'year'])
+
+print(region_year_cases)
+
+# Calculate year-over-year percentage change
+yoy_change = region_year_cases.copy()
+yoy_change['prev_year_cases'] = yoy_change.groupby('region')['total_cases'].shift(1)
+yoy_change['yoy_change_pct'] = ((yoy_change['total_cases'] - yoy_change['prev_year_cases']) / 
+                               yoy_change['prev_year_cases']) * 100
+yoy_change = yoy_change.dropna()  # Remove first year with no previous data
+
+print(yoy_change)
+
+# Month with highest average cases by region
+monthly_region_cases = malaria_surveillance.groupby(['region', 'month'])['cases'].mean().reset_index()
+monthly_region_cases = monthly_region_cases.rename(columns={'cases': 'avg_cases'})
+
+# Find the highest month for each region
+highest_months = monthly_region_cases.loc[monthly_region_cases.groupby('region')['avg_cases'].idxmax()]
+highest_months = highest_months.sort_values('region')
+
+print(highest_months)
+
+# Rank regions by total cases for each year
+region_ranks = malaria_surveillance.groupby(['year', 'region'])['cases'].sum().reset_index()
+region_ranks = region_ranks.rename(columns={'cases': 'total_cases'})
+
+# Add rank column within each year group
+region_ranks['rank'] = region_ranks.groupby('year')['total_cases'].rank(ascending=False, method='min')
+region_ranks = region_ranks.sort_values(['year', 'rank'])
+
+print(region_ranks)
+```
+
+#### Explanation:
+- Multi-level grouping allows more detailed analysis by combining dimensions
+- `shift(1)` accesses the previous value in the sequence for year-over-year calculations
+- `groupby().idxmax()` identifies the index of the maximum value in each group
+- `rank(ascending=False)` ranks in descending order (highest cases get rank 1)
+
+---
+
+### Exercise 1.3: Rolling Aggregations
+
+```python
+# Prepare time series data by date
+malaria_surveillance['date'] = pd.to_datetime(malaria_surveillance[['year', 'month']].assign(day=1))
+ts_data = malaria_surveillance.groupby('date')['cases'].sum().reset_index()
+
+# Calculate 3-month rolling average for each region
+region_rolling_avg = malaria_surveillance.groupby(['region', 'date'])['cases'].sum().reset_index()
+region_rolling_avg = region_rolling_avg.sort_values(['region', 'date'])
+
+# Add rolling average column for each region
+for region in region_rolling_avg['region'].unique():
+    mask = region_rolling_avg['region'] == region
+    region_rolling_avg.loc[mask, 'rolling_avg_3m'] = (
+        region_rolling_avg.loc[mask, 'cases'].rolling(window=3).mean()
+    )
+
+print(region_rolling_avg.head())
+
+# Find 3-month period with highest average cases per year
+rolling_window_max = ts_data.copy()
+rolling_window_max['rolling_avg_3m'] = rolling_window_max['cases'].rolling(window=3).mean()
+rolling_window_max['year'] = rolling_window_max['date'].dt.year
+rolling_window_max['month'] = rolling_window_max['date'].dt.month
+
+# Group by year and find month with max rolling average
+max_by_year = rolling_window_max.dropna().groupby('year').apply(
+    lambda x: x.loc[x['rolling_avg_3m'].idxmax()]
+)[['year', 'month', 'rolling_avg_3m']]
+
+print(max_by_year)
+
+# Visualize raw cases vs. rolling average
+plt.figure(figsize=(12, 6))
+plt.plot(ts_data['date'], ts_data['cases'], color='gray', alpha=0.6, label='Raw data')
+plt.plot(
+    rolling_window_max['date'], 
+    rolling_window_max['rolling_avg_3m'], 
+    color='red', 
+    linewidth=2,
+    label='3-Month Rolling Average'
+)
+plt.title('Malaria Cases: Raw Data vs 3-Month Rolling Average')
+plt.xlabel('Date')
+plt.ylabel('Number of Cases')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+#### Explanation:
+- The `rolling()` method calculates moving averages over your data
+- `window=3` specifies a 3-month rolling window
+- Rolling averages smooth out random fluctuations to reveal underlying trends
+- Visualizing both raw data and rolling averages shows the smoothing effect
+
+---
+
+## 2️⃣ Time Series Analysis
+
+### Exercise 2.1: Basic Time Series Visualization
+
+```python
+# Prepare monthly time series data
+monthly_ts = malaria_surveillance.copy()
+monthly_ts['date'] = pd.to_datetime(monthly_ts[['year', 'month']].assign(day=1))
+monthly_ts = monthly_ts.groupby('date')['cases'].sum().reset_index()
+monthly_ts = monthly_ts.rename(columns={'cases': 'total_cases'})
+monthly_ts = monthly_ts.sort_values('date')
+
+# Create a basic line plot
+plt.figure(figsize=(12, 6))
+plt.plot(monthly_ts['date'], monthly_ts['total_cases'], color='darkblue', marker='o', markersize=3)
+plt.title('Monthly Malaria Cases Over Time')
+plt.xlabel('Date')
+plt.ylabel('Total Cases')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# Add a trend line
+plt.figure(figsize=(12, 6))
+plt.plot(monthly_ts['date'], monthly_ts['total_cases'], color='gray', alpha=0.6, marker='o', markersize=2)
+
+# Add LOESS smoothing
+from statsmodels.nonparametric.smoothers_lowess import lowess
+monthly_ts['date_numeric'] = monthly_ts['date'].astype(np.int64)
+smoothed = lowess(monthly_ts['total_cases'], monthly_ts['date_numeric'], frac=0.2)
+
+plt.plot(monthly_ts['date'], smoothed[:, 1], color='red', linewidth=2)
+plt.fill_between(
+    monthly_ts['date'],
+    smoothed[:, 1] - 1.96 * monthly_ts['total_cases'].std(),
+    smoothed[:, 1] + 1.96 * monthly_ts['total_cases'].std(),
+    color='red', alpha=0.2
+)
+
+plt.title('Monthly Malaria Cases with Trend Line')
+plt.xlabel('Date')
+plt.ylabel('Total Cases')
+plt.figtext(0.5, 0.01, 'Red line shows smoothed trend with 95% confidence interval', 
+           wrap=True, horizontalalignment='center', fontsize=9)
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# Create time series for top 3 regions
+top_regions = malaria_surveillance.groupby('region')['cases'].sum().sort_values(ascending=False).head(3).index
+
+# Create separate plots for top 3 regions
+for region in top_regions:
+    region_data = malaria_surveillance[malaria_surveillance['region'] == region].copy()
+    region_data['date'] = pd.to_datetime(region_data[['year', 'month']].assign(day=1))
+    region_data = region_data.groupby('date')['cases'].sum().reset_index()
+    
+    plt.figure(figsize=(12, 6))
+    plt.plot(region_data['date'], region_data['cases'], color='darkgreen', marker='o', markersize=3)
+    plt.title(f'Monthly Malaria Cases in {region}')
+    plt.xlabel('Date')
+    plt.ylabel('Total Cases')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+```
+
+#### Explanation:
+- We convert year and month to proper dates for time series plotting
+- LOESS smoothing (locally weighted scatterplot smoothing) adds a trend line that helps visualize the overall pattern
+- `frac=0.2` controls the smoothness of the curve (smaller values = smoother curve)
+- We create separate plots for the top 3 regions to focus on areas with highest burden
+
+---
+
+### Exercise 2.2: Comparative Time Series
+
+```python
+# Create time series by region
+region_ts = malaria_surveillance.copy()
+region_ts['date'] = pd.to_datetime(region_ts[['year', 'month']].assign(day=1))
+region_ts = region_ts.groupby(['region', 'date'])['cases'].sum().reset_index()
+region_ts = region_ts.sort_values(['region', 'date'])
+
+# Plot all regions on the same chart
+plt.figure(figsize=(14, 8))
+for region in region_ts['region'].unique():
+    data = region_ts[region_ts['region'] == region]
+    plt.plot(data['date'], data['cases'], label=region)
+
+plt.title('Malaria Cases Over Time by Region')
+plt.xlabel('Date')
+plt.ylabel('Total Cases')
+plt.legend(title='Region', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# Create faceted plot by region
+import matplotlib.gridspec as gridspec
+
+# Calculate number of rows and columns for the grid
+regions = sorted(region_ts['region'].unique())
+n_regions = len(regions)
+n_cols = 2
+n_rows = (n_regions + 1) // n_cols
+
+fig = plt.figure(figsize=(14, 4 * n_rows))
+gs = gridspec.GridSpec(n_rows, n_cols)
+
+for i, region in enumerate(regions):
+    ax = plt.subplot(gs[i])
+    data = region_ts[region_ts['region'] == region]
+    ax.plot(data['date'], data['cases'], color=f'C{i}')
+    ax.set_title(f'Malaria Cases in {region}')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Cases')
+    ax.grid(True, alpha=0.3)
+    plt.xticks(rotation=45)
+    
+plt.tight_layout()
+plt.show()
+
+# Compare seasonal patterns between urban and rural areas
+if 'area_type' in malaria_surveillance.columns:
+    seasonal_comparison = malaria_surveillance[malaria_surveillance['area_type'].isin(['Urban', 'Rural'])].copy()
+    seasonal_comparison = seasonal_comparison.groupby(['area_type', 'month'])['cases'].mean().reset_index()
+    seasonal_comparison['month_name'] = seasonal_comparison['month'].apply(lambda x: calendar.month_name[x])
+    
+    plt.figure(figsize=(12, 6))
+    for area in seasonal_comparison['area_type'].unique():
+        data = seasonal_comparison[seasonal_comparison['area_type'] == area]
+        plt.plot(data['month'], data['cases'], marker='o', label=area)
+        
+    plt.xticks(range(1, 13), [calendar.month_abbr[m] for m in range(1, 13)])
+    plt.title('Seasonal Pattern of Malaria Cases: Urban vs Rural')
+    plt.xlabel('Month')
+    plt.ylabel('Average Cases')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+```
+
+#### Explanation:
+- Creating separate lines for each region lets us compare patterns on the same plot
+- Faceting creates a separate panel for each region, making it easier to see individual patterns
+- To create a facet plot in matplotlib, we use gridspec to create a grid of subplots
+- Comparing urban and rural seasonal patterns can reveal different transmission dynamics
+
+---
+
+### Exercise 2.3: Time Series Decomposition
+
+```python
+# Create proper time series object
+monthly_counts = malaria_surveillance.groupby(['year', 'month'])['cases'].sum().reset_index()
+monthly_counts = monthly_counts.sort_values(['year', 'month'])
+
+# Create a date index
+monthly_counts['date'] = pd.to_datetime(monthly_counts[['year', 'month']].assign(day=1))
+monthly_counts = monthly_counts.set_index('date')
+ts_data = monthly_counts['cases']
+
+# Decompose the time series
+from statsmodels.tsa.seasonal import seasonal_decompose
+
+if len(ts_data) >= 24:  # Need at least 2 years of data
+    # Decompose the time series
+    decomposition = seasonal_decompose(ts_data, model='additive', period=12)
+    
+    # Plot the decomposition
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(14, 12))
+    
+    decomposition.observed.plot(ax=ax1)
+    ax1.set_title('Observed')
+    ax1.set_xlabel('')
+    
+    decomposition.trend.plot(ax=ax2)
+    ax2.set_title('Trend')
+    ax2.set_xlabel('')
+    
+    decomposition.seasonal.plot(ax=ax3)
+    ax3.set_title('Seasonal')
+    ax3.set_xlabel('')
+    
+    decomposition.resid.plot(ax=ax4)
+    ax4.set_title('Residual')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Extract components
+    trend = decomposition.trend
+    seasonal = decomposition.seasonal
+    residual = decomposition.resid
+    
+    # Create a dataframe for visualization with pandas
+    decomp_data = pd.DataFrame({
+        'observed': ts_data,
+        'trend': trend,
+        'seasonal': seasonal,
+        'residual': residual
+    })
+    
+    # Remove rows with NaN (trend component has NaNs at the edges)
+    decomp_data = decomp_data.dropna()
+    
+    # Visualize the seasonal component
+    seasonal_pattern = decomp_data['seasonal'].groupby(decomp_data.index.month).mean()
+    
+    plt.figure(figsize=(12, 6))
+    plt.plot(seasonal_pattern.index, seasonal_pattern.values, 'o-', color='blue', linewidth=2, markersize=8)
+    plt.xticks(range(1, 13), [calendar.month_abbr[m] for m in range(1, 13)])
+    plt.title('Seasonal Pattern of Malaria Cases')
+    plt.xlabel('Month')
+    plt.ylabel('Seasonal Effect')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    
+    # Compare actual vs. predicted (trend + seasonal)
+    decomp_data['predicted'] = decomp_data['trend'] + decomp_data['seasonal']
+    
+    plt.figure(figsize=(14, 8))
+    plt.plot(decomp_data.index, decomp_data['observed'], color='black', label='Observed')
+    plt.plot(decomp_data.index, decomp_data['predicted'], color='red', label='Predicted')
+    plt.title('Observed vs. Predicted Malaria Cases')
+    plt.xlabel('Date')
+    plt.ylabel('Number of Cases')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+```
+
+#### Explanation:
+- `seasonal_decompose()` separates the time series into trend, seasonal, and random components
+- `period=12` indicates monthly data (12 observations per year)
+- The trend component shows the long-term progression of malaria cases
+- The seasonal component reveals predictable patterns that repeat each year
+- The residual component captures unexplained variations that may be due to outbreaks or other factors
+
+---
+
+## 3️⃣ Computing Incidence Rates
+
+### Exercise 3.1: Basic Incidence Calculation
+
+```python
+# Calculate annual incidence rate per 1000 people
+annual_incidence = malaria_surveillance.groupby('year').agg(
+    total_cases=('cases', 'sum'),
+    total_population=('population', 'sum')
+).reset_index()
+
+annual_incidence['incidence_per_1000'] = (annual_incidence['total_cases'] / annual_incidence['total_population']) * 1000
+annual_incidence = annual_incidence.sort_values('year')
+
+print(annual_incidence)
+
+# Calculate regional incidence rates by year
+regional_incidence = malaria_surveillance.groupby(['region', 'year']).agg(
+    total_cases=('cases', 'sum'),
+    total_population=('population', 'sum')
+).reset_index()
+
+regional_incidence['incidence_per_1000'] = (regional_incidence['total_cases'] / regional_incidence['total_population']) * 1000
+regional_incidence = regional_incidence.sort_values(['year', 'region'])
+
+print(regional_incidence)
+
+# Visualize incidence trend
+plt.figure(figsize=(12, 6))
+plt.plot(annual_incidence['year'], annual_incidence['incidence_per_1000'], 
+         'o-', color='darkblue', linewidth=2, markersize=8)
+plt.title('Annual Malaria Incidence Rate per 1000 Population')
+plt.xlabel('Year')
+plt.ylabel('Incidence per 1000')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# Identify regions with highest/lowest incidence
+region_avg_incidence = regional_incidence.groupby('region')['incidence_per_1000'].mean().reset_index()
+region_avg_incidence = region_avg_incidence.sort_values('incidence_per_1000', ascending=False)
+
+print(f"Region with highest average incidence: {region_avg_incidence.iloc[0]['region']} "
+      f"with {region_avg_incidence.iloc[0]['incidence_per_1000']:.2f} cases per 1000 people")
+
+print(f"Region with lowest average incidence: {region_avg_incidence.iloc[-1]['region']} "
+      f"with {region_avg_incidence.iloc[-1]['incidence_per_1000']:.2f} cases per 1000 people")
+```
+
+#### Explanation:
+- Incidence rates standardize disease burden by population size
+- The formula is (number of cases / population) × 1000 for cases per 1000 people
+- We calculate incidence at national and regional levels to identify areas of concern
+- Visualizing incidence trends helps identify if the disease burden is increasing or decreasing over time
+
+---
+
+### Exercise 3.2: Demographic-Specific Incidence
+
+```python
+# Age-specific incidence rates (if age data available)
+if 'age_group' in malaria_surveillance.columns and 'age_group_population' in malaria_surveillance.columns:
+    age_incidence = malaria_surveillance.groupby('age_group').agg(
+        total_cases=('cases', 'sum'),
+        total_population=('age_group_population', 'sum')
+    ).reset_index()
+    
+    age_incidence['incidence_per_1000'] = (age_incidence['total_cases'] / age_incidence['total_population']) * 1000
+    age_incidence = age_incidence.sort_values('incidence_per_1000', ascending=False)
+    
+    print(age_incidence)
+    
+    # Visualize age-specific incidence
+    plt.figure(figsize=(12, 8))
+    plt.barh(age_incidence['age_group'], age_incidence['incidence_per_1000'])
+    plt.title('Malaria Incidence Rate by Age Group')
+    plt.xlabel('Incidence per 1000 Population')
+    plt.ylabel('Age Group')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+# Gender-specific incidence rates (if gender data available)
+if 'gender' in malaria_surveillance.columns and 'gender_population' in malaria_surveillance.columns:
+    gender_incidence = malaria_surveillance.groupby('gender').agg(
+        total_cases=('cases', 'sum'),
+        total_population=('gender_population', 'sum')
+    ).reset_index()
+    
+    gender_incidence['incidence_per_1000'] = (gender_incidence['total_cases'] / gender_incidence['total_population']) * 1000
+    gender_incidence = gender_incidence.sort_values('incidence_per_1000', ascending=False)
+    
+    print(gender_incidence)
+    
+    # Visualize gender-specific incidence
+    plt.figure(figsize=(10, 6))
+    plt.bar(gender_incidence['gender'], gender_incidence['incidence_per_1000'])
+    plt.title('Malaria Incidence Rate by Gender')
+    plt.xlabel('Gender')
+    plt.ylabel('Incidence per 1000 Population')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+# Identify highest risk demographic groups
+# This will depend on what demographic variables are available in your dataset
+# Here's a generic approach that works with multiple demographic variables
+demographic_vars = [var for var in ['age_group', 'gender', 'area_type', 'socioeconomic_status'] 
+                   if var in malaria_surveillance.columns]
+
+for var in demographic_vars:
+    if f'{var}_population' in malaria_surveillance.columns:
+        demo_incidence = malaria_surveillance.groupby(var).agg(
+            total_cases=('cases', 'sum'),
+            total_population=(f'{var}_population', 'sum')
+        ).reset_index()
+        
+        demo_incidence['incidence_per_1000'] = (demo_incidence['total_cases'] / demo_incidence['total_population']) * 1000
+        demo_incidence = demo_incidence.sort_values('incidence_per_1000', ascending=False)
+        
+        print(f"\nIncidence rates by {var}:")
+        print(demo_incidence)
+```
+
+#### Explanation:
+- Demographic-specific incidence helps identify vulnerable subpopulations
+- We use conditional code that adapts to whatever demographic variables are available in the dataset
+- For each demographic variable, we calculate incidence rates if population data is available
+- This approach can identify the most vulnerable groups for targeted interventions
+
+---
+
+### Exercise 3.3: Incidence Hotspot Detection
+
+```python
+# Calculate z-scores for regional incidence rates
+regional_z_scores = regional_incidence.copy()
+
+# Calculate z-scores within each year
+regional_z_scores = regional_incidence.groupby('year').apply(
+    lambda x: x.assign(
+        mean_incidence = x['incidence_per_1000'].mean(),
+        sd_incidence = x['incidence_per_1000'].std(),
+        z_score = (x['incidence_per_1000'] - x['incidence_per_1000'].mean()) / x['incidence_per_1000'].std()
+    )
+).reset_index(drop=True)
+
+# Identify hotspots (Z-score > 2)
+hotspots = regional_z_scores[regional_z_scores['z_score'] > 2].sort_values('z_score', ascending=False)
+
+print(hotspots)
+
+# Create a heatmap of Z-scores
+pivot_table = regional_z_scores.pivot(index='region', columns='year', values='z_score')
+
+plt.figure(figsize=(14, 10))
+sns.heatmap(pivot_table, cmap='RdYlBu_r', center=0, linewidths=0.5, annot=True, fmt='.2f')
+plt.title('Malaria Incidence Rate Z-Scores by Region and Year')
+plt.xlabel('Year')
+plt.ylabel('Region')
+plt.tight_layout()
+plt.show()
+
+# Top 10 hotspot region-year combinations
+top_hotspots = regional_z_scores.sort_values('z_score', ascending=False).head(10)
+top_hotspots = top_hotspots[['region', 'year', 'incidence_per_1000', 'z_score']]
+
+print(top_hotspots)
+```
+
+#### Explanation:
+- Z-scores standardize values to show how many standard deviations they are from the mean
+- A Z-score > 2 indicates that the value is unusually high (top ~2.5% of a normal distribution)
+- The heatmap visualization makes it easy to spot hotspots across both time and space
+- This approach helps prioritize regions for targeted interventions
+
+---
+
+## 4️⃣ Exporting Analysis Results
+
+### Exercise 4.1: Basic Data Export
+
+```python
+# Export annual incidence to CSV
+annual_incidence.to_csv("annual_malaria_incidence.csv", index=False)
+
+# With more control
+annual_incidence.to_csv("annual_malaria_incidence_utf8.csv", index=False, encoding='utf-8')
+
+# Export regional incidence to Excel
+with pd.ExcelWriter('regional_malaria_incidence.xlsx') as writer:
+    regional_incidence.to_excel(writer, sheet_name='Regional Incidence', index=False)
+
+# Create an Excel file with multiple worksheets for different years
+years = regional_incidence['year'].unique()
+
+with pd.ExcelWriter('malaria_incidence_by_year.xlsx') as writer:
+    # Add a sheet for each year
+    for yr in years:
+        year_data = regional_incidence[regional_incidence['year'] == yr].sort_values('incidence_per_1000', ascending=False)
+        year_data.to_excel(writer, sheet_name=f'Year_{yr}', index=False)
+    
+    # Add a summary sheet
+    summary = regional_incidence.groupby('region').agg(
+        avg_incidence=('incidence_per_1000', 'mean'),
+        min_incidence=('incidence_per_1000', 'min'),
+        max_incidence=('incidence_per_1000', 'max')
+    ).reset_index().sort_values('avg_incidence', ascending=False)
+    
+    summary.to_excel(writer, sheet_name='Summary', index=False)
+```
+
+#### Explanation:
+- `to_csv()` exports data to CSV format
+- `to_excel()` exports data to Excel format
+- Using a context manager with `ExcelWriter` allows creating multiple sheets
+- Adding a summary sheet provides a quick overview of the key statistics
+
+---
+
+### Exercise 4.2: Create a Comprehensive Report
+
+```python
+# This would be code for a Jupyter Notebook
+
+# First cell - Setup and load data
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import Markdown, display
+import calendar
+
+# Load your data and perform analysis
+malaria_surveillance = pd.read_csv("malaria_surveillance.csv")
+
+# Prepare key datasets for the report
+annual_incidence = malaria_surveillance.groupby('year').agg(
+    total_cases=('cases', 'sum'),
+    total_population=('population', 'sum')
+).reset_index()
+annual_incidence['incidence_per_1000'] = (annual_incidence['total_cases'] / annual_incidence['total_population']) * 1000
+
+regional_incidence = malaria_surveillance.groupby(['region', 'year']).agg(
+    total_cases=('cases', 'sum'),
+    total_population=('population', 'sum')
+).reset_index()
+regional_incidence['incidence_per_1000'] = (regional_incidence['total_cases'] / regional_incidence['total_population']) * 1000
+
+monthly_pattern = malaria_surveillance.groupby('month')['cases'].mean().reset_index()
+monthly_pattern['month_name'] = monthly_pattern['month'].apply(lambda x: calendar.month_name[x])
+
+# Second cell - Executive Summary
+display(Markdown("# Malaria Incidence Analysis Report"))
+display(Markdown("## Executive Summary"))
+
+avg_incidence = annual_incidence['incidence_per_1000'].mean()
+highest_region = regional_incidence.groupby('region')['incidence_per_1000'].mean().idxmax()
+peak_month = monthly_pattern.loc[monthly_pattern['cases'].idxmax(), 'month_name']
+trend_direction = "rising" if annual_incidence.iloc[-1]['incidence_per_1000'] > annual_incidence.iloc[0]['incidence_per_1000'] else "declining"
+
+summary_text = f"""
+This report analyzes malaria incidence data across different regions and time periods. Key findings include:
+
+- The overall malaria incidence rate was {avg_incidence:.2f} cases per 1000 population.
+- {highest_region} had the highest average incidence rate.
+- The peak month for malaria cases is typically {peak_month}.
+- There was a {trend_direction} trend in incidence rates over the observed period.
+"""
+
+display(Markdown(summary_text))
+
+# Third cell - Temporal Trends
+display(Markdown("## Temporal Trends in Malaria Incidence"))
+
+plt.figure(figsize=(12, 6))
+plt.plot(annual_incidence['year'], annual_incidence['incidence_per_1000'], 
+         'o-', color='blue', linewidth=2, markersize=8)
+plt.title('Annual Malaria Incidence per 1000 Population')
+plt.xlabel('Year')
+plt.ylabel('Incidence per 1000')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+display(Markdown("The above figure shows the trend in malaria incidence rates over time."))
+
+# Fourth cell - Regional Comparison
+display(Markdown("## Regional Comparison"))
+
+region_summary = regional_incidence.groupby('region').agg(
+    avg_incidence=('incidence_per_1000', 'mean'),
+    min_incidence=('incidence_per_1000', 'min'),
+    max_incidence=('incidence_per_1000', 'max')
+).reset_index().sort_values('avg_incidence', ascending=False)
+
+display(region_summary.style
+        .set_caption("Summary of Regional Malaria Incidence (per 1000 population)")
+        .format({'avg_incidence': '{:.2f}', 'min_incidence': '{:.2f}', 'max_incidence': '{:.2f}'})
+        .set_properties(**{'border': '1px solid gray', 'text-align': 'center'})
+        .set_table_styles([{
+            'selector': 'th',
+            'props': [('background-color', '#f2f2f2'), ('font-weight', 'bold')]
+        }])
+       )
+
+pivot_table = regional_incidence.pivot(index='region', columns='year', values='incidence_per_1000')
+
+plt.figure(figsize=(14, 8))
+sns.heatmap(pivot_table, cmap='YlOrRd', annot=True, fmt='.1f', linewidths=0.5)
+plt.title('Heatmap of Malaria Incidence by Region and Year')
+plt.xlabel('Year')
+plt.ylabel('Region')
+plt.tight_layout()
+plt.show()
+
+# Fifth cell - Seasonal Patterns
+display(Markdown("## Seasonal Patterns"))
+
+plt.figure(figsize=(12, 6))
+plt.plot(monthly_pattern['month'], monthly_pattern['cases'], 'o-', markersize=8)
+plt.xticks(monthly_pattern['month'], [calendar.month_abbr[m] for m in monthly_pattern['month']])
+plt.title('Seasonal Pattern of Malaria Cases')
+plt.xlabel('Month')
+plt.ylabel('Average Number of Cases')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+top_months = monthly_pattern.sort_values('cases', ascending=False).head(3)['month_name'].tolist()
+top_months_str = ", ".join(top_months)
+
+seasonal_text = f"""
+The seasonal pattern shows peak malaria transmission during {top_months_str}, which corresponds to the rainy season in many endemic areas.
+"""
+
+display(Markdown(seasonal_text))
+
+# Sixth cell - Recommendations
+display(Markdown("## Recommendations for Targeted Interventions"))
+
+recommendations = f"""
+Based on our analysis, we recommend:
+
+1. **Regional Focus**: Prioritize interventions in {', '.join(region_summary['region'].head(3).tolist())}, which have the highest incidence rates.
+
+2. **Seasonal Timing**: Intensify preventive measures before and during {' and '.join(top_months[:2])} to address peak transmission periods.
+
+3. **Monitoring Hotspots**: Establish enhanced surveillance in areas with increasing incidence trends.
+"""
+
+display(Markdown(recommendations))
+```
+
+#### Explanation:
+- Jupyter Notebooks combine code, results, and narrative text in a reproducible document
+- `display(Markdown())` formats text nicely in Jupyter Notebooks
+- DataFrames can be styled for better presentation using the `style` attribute
+- The report structure includes an executive summary, findings sections, and actionable recommendations
+
+---
+
+### Exercise 4.3: Automated Reporting
+
+```python
+def generate_regional_report(region, year=2023, output_file=None):
+    """
+    Generate a report for a specific region and year
+    
+    Parameters:
+    -----------
+    region : str
+        The region name to filter data for
+    year : int
+        The year to focus analysis on
+    output_file : str, optional
+        If provided, save figures to this location prefix
+    """
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import numpy as np
+    import calendar
+    from matplotlib.backends.backend_pdf import PdfPages
+    
+    # Create a PDF file if output_file is provided
+    if output_file:
+        pdf = PdfPages(output_file)
+    
+    # Filter data for this region
+    region_data = malaria_surveillance[malaria_surveillance['region'] == region].copy()
+    
+    # Report header
+    print(f"{'='*80}")
+    print(f"Malaria Incidence Report for {region} Region, {year}".center(80))
+    print(f"{'='*80}")
+    
+    # Key Statistics
+    print("\n## Key Statistics\n")
+    
+    region_stats = region_data.groupby('year').agg(
+        total_cases=('cases', 'sum'),
+        avg_monthly_cases=('cases', 'mean'),
+        total_deaths=('deaths', 'sum'),
+        total_population=('population', 'sum')
+    ).reset_index()
+    
+    # Get stats for the specified year
+    if year in region_stats['year'].values:
+        year_stats = region_stats[region_stats['year'] == year].iloc[0]
+        
+        cfr = (year_stats['total_deaths'] / year_stats['total_cases']) * 100
+        incidence = (year_stats['total_cases'] / year_stats['total_population']) * 1000
+        
+        print(f"Total Cases: {year_stats['total_cases']:,.0f}")
+        print(f"Average Monthly Cases: {year_stats['avg_monthly_cases']:.1f}")
+        print(f"Case Fatality Rate: {cfr:.2f}%")
+        print(f"Incidence per 1000: {incidence:.2f}")
+    else:
+        print(f"Data for year {year} not available.")
+    
+    # Trend Analysis
+    print("\n## Trend Analysis\n")
+    
+    # Create time series plot
+    region_data['date'] = pd.to_datetime(region_data[['year', 'month']].assign(day=1))
+    trend_data = region_data.groupby('date')['cases'].sum().reset_index()
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(trend_data['date'], trend_data['cases'], 'o-', color='blue')
+    
+    # Add trend line
+    from scipy.signal import savgol_filter
+    if len(trend_data) > 5:  # Need enough data for smoothing
+        trend_data['smooth'] = savgol_filter(trend_data['cases'], 
+                                           min(5, len(trend_data) | 1), 1)
+        ax.plot(trend_data['date'], trend_data['smooth'], 'r-')
+        
+    ax.set_title(f'Malaria Cases in {region} Region')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Number of Cases')
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    
+    if output_file:
+        pdf.savefig(fig)
+    else:
+        plt.show()
+    
+    # Seasonal Pattern
+    print("\n## Seasonal Pattern\n")
+    
+    # Create seasonal plot
+    seasonal = region_data.groupby('month')['cases'].mean().reset_index()
+    seasonal['month_name'] = seasonal['month'].apply(lambda x: calendar.month_name[x])
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(seasonal['month'], seasonal['cases'], 'o-')
+    ax.set_xticks(seasonal['month'])
+    ax.set_xticklabels([calendar.month_abbr[m] for m in seasonal['month']])
+    ax.set_title(f'Seasonal Pattern in {region} Region')
+    ax.set_xlabel('Month')
+    ax.set_ylabel('Average Cases')
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    
+    if output_file:
+        pdf.savefig(fig)
+    else:
+        plt.show()
+    
+    # Recommendations
+    print("\n## Recommendations\n")
+    
+    peak_month = seasonal.loc[seasonal['cases'].idxmax(), 'month_name']
+    
+    print(f"1. Intensify prevention efforts in {peak_month}.")
+    print("2. Focus on areas with population density > 1000 people per sq km.")
+    print("3. Strengthen case management to reduce the case fatality rate.")
+    
+    # Close PDF if it was created
+    if output_file:
+        pdf.close()
+        print(f"\nReport saved to {output_file}")
+
+# Create a function to generate a master report
+def generate_master_report(regions, output_file=None):
+    """Generate a summary report for all regions"""
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+    
+    if output_file:
+        pdf = PdfPages(output_file)
+    
+    print(f"{'='*80}")
+    print("Master Malaria Report - All Regions".center(80))
+    print(f"{'='*80}")
+    
+    # Overall incidence trend
+    annual_incidence = malaria_surveillance.groupby('year').agg(
+        total_cases=('cases', 'sum'),
+        total_population=('population', 'sum')
+    ).reset_index()
+    annual_incidence['incidence_per_1000'] = (annual_incidence['total_cases'] / annual_incidence['total_population']) * 1000
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(annual_incidence['year'], annual_incidence['incidence_per_1000'], 'o-', color='blue', linewidth=2)
+    ax.set_title('Overall Malaria Incidence Rate Trend')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Incidence per 1000')
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    
+    if output_file:
+        pdf.savefig(fig)
+    else:
+        plt.show()
+    
+    # Regional comparison
+    region_stats = malaria_surveillance.groupby('region').agg(
+        total_cases=('cases', 'sum'),
+        avg_incidence=('cases', lambda x: (sum(x) / sum(malaria_surveillance.loc[x.index, 'population'])) * 1000)
+    ).reset_index().sort_values('avg_incidence', ascending=False)
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar(region_stats['region'], region_stats['avg_incidence'])
+    ax.set_title('Average Malaria Incidence by Region')
+    ax.set_xlabel('Region')
+    ax.set_ylabel('Average Incidence per 1000')
+    ax.tick_params(axis='x', rotation=45)
+    fig.tight_layout()
+    
+    if output_file:
+        pdf.savefig(fig)
+    else:
+        plt.show()
+    
+    # Close PDF if it was created
+    if output_file:
+        pdf.close()
+        print(f"\nMaster report saved to {output_file}")
+
+# Example usage (would be in a separate cell or script)
+regions = malaria_surveillance['region'].unique()
+
+# Create reports directory if it doesn't exist
+import os
+if not os.path.exists('reports'):
+    os.makedirs('reports')
+
+# Generate individual reports
+for region in regions:
+    output_file = f"reports/malaria_report_{region.lower().replace(' ', '_')}.pdf"
+    generate_regional_report(region, year=2023, output_file=output_file)
+    print(f"Generated report for {region}\n")
+
+# Generate master report
+generate_master_report(regions, output_file="reports/master_malaria_report.pdf")
+```
+
+#### Explanation:
+- Parameterized functions allow creating customized reports for different regions or time periods
+- We use PDF export to create portable documents that can be shared easily
+- Each report includes statistics, visualizations, and recommendations
+- The master report provides a cross-regional comparison
+- This approach can generate region-specific reports automatically
+
+---
+
+## 💡 What's Next?
+
+✔ After completing Week 4, you have learned to analyze time-based malaria data, calculate standardized incidence rates, and create automated reports.  
+✔ In **Week 5**, we will explore spatial analysis techniques for mapping malaria distribution and identifying geographic hotspots.
