@@ -17,7 +17,7 @@ Data preprocessing cleans and formats DHIS2 data for SNT analysis. We work with 
 
 This document breaks down the R code for preprocessing DHIS2 malaria data, explaining each section's purpose, techniques used, and best practices implemented.
 
-## 1. Package Management
+## Step 1: Package Management
 
 ```r
 # Check if pacman is installed, if not install it
@@ -46,7 +46,7 @@ pacman::p_load(
 - Comments make it clear what each package is for
 - This approach is more efficient than separate `library()` calls
 
-## 2. File Management
+## Step 2: File Management
 
 ```r
 # Set working directory
@@ -67,7 +67,7 @@ dir.create("aggregated_data", showWarnings = FALSE)
 - Creating directories programmatically ensures they exist before saving files
 - This supports reproducible workflows where anyone can run the code
 
-## 3. Data Import
+## Step 3: Data Import
 
 ```r
 # Get list of Excel files
@@ -91,7 +91,7 @@ raw_data <- dplyr::bind_rows(data_files)
 - Package prefixes (e.g., `readxl::read_excel`) make function sources explicit
 - The pattern `\\.xlsx$` ensures only Excel files are processed
 
-## 4. Data Cleaning and Transformation
+## Step 4: Data Cleaning and Transformation
 
 ```r
 # Clean and prepare the dataset
@@ -151,7 +151,7 @@ clean_data <- raw_data |>
 - Explicit type conversion prevents issues with calculations later
 - Breaking each pipe operation into its own line improves readability
 
-## 5. Outlier Detection and Replacement
+## Step 5: Outlier Detection and Replacement
 
 ```r
 # Basic example of outlier detection using IQR method
@@ -194,7 +194,7 @@ corrected_data <- outlier_detection |>
 - `na.rm = TRUE` handles missing values appropriately
 - `ungroup()` prevents unexpected behavior in subsequent operations
 
-## 6. Computing New Variables
+## Step 6: Computing New Variables
 
 ```r
 # Add calculated variables
@@ -236,7 +236,7 @@ computed_data <- corrected_data |>
 - `na.rm = TRUE` properly handles missing values in calculations
 - `ungroup()` prevents unexpected behavior in subsequent operations
 
-## 7. Saving Processed Data
+## Step 7: Saving Processed Data
 
 ```r
 # Save as CSV
@@ -255,7 +255,7 @@ writexl::write_xlsx(computed_data, "cleaned_data/facility_level_data.xlsx")
 - Saving to the `cleaned_data` directory keeps files organized
 - Multiple formats accommodate different user preferences
 
-## 8. Aggregating Data
+## Step 8: Aggregating Data
 
 ```r
 # Monthly aggregation at administrative level 2
@@ -303,31 +303,7 @@ readr::write_csv(yearly_adm2_data, "aggregated_data/yearly_adm2_data.csv")
 - Different temporal aggregations support various analysis needs
 - Saving to the `aggregated_data` directory keeps files organized
 
-## Advanced Techniques Used
-
-1. **Function scoping with package prefixes**
-   - Using `dplyr::select()` instead of just `select()` makes the code more maintainable
-   - Prevents conflicts when multiple packages have functions with the same name
-
-2. **Tidyverse programming patterns**
-   - `across()` for applying functions to multiple columns
-   - `where()` for selecting columns by predicate (like `is.numeric`)
-   - `rowwise()` for row-by-row operations
-   - `.groups = "drop"` to control grouping behavior
-
-3. **Defensive programming**
-   - Checking for division by zero
-   - Handling missing values with `na.rm = TRUE`
-   - Creating directories before saving files
-   - Proper data type conversion
-
-4. **Code organization**
-   - Clear section headers in comments
-   - Logical grouping of variables
-   - Consistent pipe format (one operation per line)
-   - Descriptive variable naming
-
-## Key R Functions Explained
+## Summary of Key R Functions Explained
 
 | Function | Package | Purpose |
 |----------|---------|---------|
@@ -347,30 +323,58 @@ readr::write_csv(yearly_adm2_data, "aggregated_data/yearly_adm2_data.csv")
 | `write_csv()` | readr | Save data as CSV |
 | `write_xlsx()` | writexl | Save data as Excel |
 
-## Best Practices Demonstrated
 
-1. **Readability**
-   - Descriptive variable names
-   - Comments explaining purpose
-   - Consistent formatting
-   - Logical organization
+## Common Mistakes to Avoid
 
-2. **Maintainability**
-   - Package prefixes
-   - Modular structure
-   - Limited line length
-   - Clear data flow
+1. **Data Import Issues**
+   - Not checking file structure consistency before binding
+   - Hardcoding file paths that won't work on other computers
+   - Missing data validation after import
+   - Not handling potential encoding issues
 
-3. **Reproducibility**
-   - Creating output directories
-   - Self-contained file handling
-   - Consistent handling of missing values
-   - Documentation of steps
+2. **Data Cleaning Problems**
+   - Overwriting original data without backups
+   - Forgetting to handle missing values (`na.rm = TRUE`)
+   - Mixing variable naming conventions
+   - Not checking data types after transformations
 
-4. **Efficiency**
-   - Vectorized operations where possible
-   - Appropriate use of `rowwise()` when needed
-   - Using `lapply()` for file imports
-   - Optimized use of memory resources
+3. **Calculation Errors**
+   - Division by zero when calculating rates
+   - Not handling edge cases (like empty groups)
+   - Incorrect aggregation methods for rates and proportions
+   - Forgetting to ungroup data after grouped operations
 
+4. **Output Issues**
+   - Not creating directories before saving files
+   - Overwriting files without warning
+   - Inconsistent naming conventions for output files
+   - Not validating outputs before proceeding to analysis
+
+5. **Outlier Detection Challenges**
+   - Using one-size-fits-all thresholds across different facilities
+   - Not considering seasonality when detecting outliers
+   - Blindly replacing outliers without understanding why they occurred
+   - Not documenting the outlier correction methodology
+  
+## Summary
+
+By completing this chapter, you've learned how to transform raw DHIS2 health facility data into clean, structured datasets ready for malaria analysis. You can now import and combine data files, clean and standardize variables, handle outliers, compute aggregate indicators, and create both facility-level and administrative-level datasets at different time scales. These preprocessing skills form the foundation for all subsequent analysis steps, from epidemiological stratification to intervention planning. With properly preprocessed data, you can generate reliable insights that directly support evidence-based decision making in malaria control programs.
+
+## Next Steps
+
+After completing the data preprocessing, you can proceed to:
+
+1. **Data Quality Assessment**
+   - Evaluate reporting completeness over time
+   - Check for unusual patterns or inconsistencies
+   - Identify facilities with potential data quality issues
+
+2. **Epidemiological Stratification**
+   - Apply the WHO stratification framework to classify areas by transmission intensity
+   - Calculate adjusted incidence rates using WHO correction factors:
+     * Incidence 1: Adjust for healthcare-seeking behavior
+     * Incidence 2: Adjust for testing rates among suspected cases
+     * Incidence 3: Adjust for reporting completeness
+   - Categorize administrative units into risk strata based on adjusted incidence
+   - Generate stratification maps to guide targeted interventions
 This code provides a robust framework for preprocessing DHIS2 data for malaria analysis, with clear organization and best practices that make it both reliable and maintainable.
