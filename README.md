@@ -1,31 +1,8 @@
----
-title: "Data preprocessing"
-weight: 2
-order: 2
-format: 
-  html:
-    toc: true
-    toc-depth: 4
----
+# DHIS2 Data Preprocessing: Code Breakdown & Explanation
 
-# Data Preprocessing
+This document breaks down the R code for preprocessing DHIS2 malaria data, explaining each section's purpose, techniques used, and best practices implemented.
 
-## Overview   
-Data preprocessing cleans and formats DHIS2 data for SNT analysis. We work with monthly routine health facility data to generate cleaned datasets at both facility level and administrative levels, which support incidence estimation and seasonality analysis.
-
-## Learning Objectives   
-- [ ] Import and combine DHIS2 data files  
-- [ ] Clean and rename key variables using tidyverse  
-- [ ] Aggregate data monthly at the admin level  
-- [ ] Save and export cleaned datasets
-
-## Step-by-Step Workflow  
-
-### Step 1: Install required packages   
-
-::: {.panel-tabset}
-
-## R
+## 1. Package Management
 
 ```r
 # Check if pacman is installed, if not install it
@@ -39,104 +16,67 @@ pacman::p_load(
   dplyr,   # for data manipulation
   tidyr,   # for data reshaping
   janitor, # for data cleaning
-  writexl  # for exporting to Excel
+  writexl,  # for exporting to Excel
+  readr    # for reading/writing CSV files
 )
 ```
 
-::: {.callout-note}
-These packages only need to be installed once. Use `pacman` to make package management easier.
-:::
+**What's happening here:**
+- The code first checks if the `pacman` package is installed, and installs it if necessary
+- It then uses `pacman` to load all required packages in one command
+- Each package has a comment explaining its purpose
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**Why this approach:**
+- Using `pacman::p_load()` simplifies package management by handling both installation and loading
+- Comments make it clear what each package is for
+- This approach is more efficient than separate `library()` calls
 
-### Step 2: Set up your working directory  
-
-::: {.panel-tabset}
-
-## R
+## 2. File Management
 
 ```r
-# Set your working directory to manage file paths and save outputs
+# Set working directory
 setwd("path/to/your/directory")
+
+# Create output directories
+dir.create("cleaned_data", showWarnings = FALSE)
+dir.create("aggregated_data", showWarnings = FALSE)
 ```
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**What's happening here:**
+- Setting the working directory for consistent file paths
+- Creating directories for processed outputs (if they don't already exist)
+- `showWarnings = FALSE` suppresses errors if directories already exist
 
-### Step 3: Import data files  
+**Why this approach:**
+- Organizing outputs in separate directories prevents clutter
+- Creating directories programmatically ensures they exist before saving files
+- This supports reproducible workflows where anyone can run the code
 
-#### Step 3.1: Read a single file
-
-::: {.panel-tabset}
-
-## R
-
-```r
-# Import Excel file
-raw_data <- readxl::read_excel("data/filename.xlsx")
-
-# For CSV files with comma delimiter
-# raw_data <- readr::read_csv("data/filename.csv")
-
-# For CSV files with semicolon delimiter
-# raw_data <- readr::read_csv2("data/filename.csv")
-```
-
-## Python
-<!-- Python equivalent code would go here -->
-:::
-
-#### Step 3.2: Read multiple files and combine them
-
-::: {.panel-tabset}
-
-## R
+## 3. Data Import
 
 ```r
-# Get all Excel files in working directory
-data_files <- list.files(pattern = "\\.xlsx$", full.names = TRUE)
+# Get list of Excel files
+file_paths <- list.files(pattern = "\\.xlsx$", full.names = TRUE)
 
 # Import all files
-myfiles <- lapply(data_files, readxl::read_excel)
+data_files <- lapply(file_paths, readxl::read_excel)
 
 # Combine into a single data frame
-raw_data <- dplyr::bind_rows(myfiles)
+raw_data <- dplyr::bind_rows(data_files)
 ```
 
-::: {.callout-warning}
-Make sure all Excel files have the same structure before binding them.
-:::
+**What's happening here:**
+- `list.files()` gets all Excel files in the working directory
+- `lapply()` reads each file using `readxl::read_excel()`
+- `bind_rows()` combines all data frames into one
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**Why this approach:**
+- This handles multiple data files efficiently
+- Using `lapply()` applies the same function to each file
+- Package prefixes (e.g., `readxl::read_excel`) make function sources explicit
+- The pattern `\\.xlsx$` ensures only Excel files are processed
 
-### Step 4: View and understand your data   
-
-::: {.panel-tabset}
-
-## R
-
-```r
-# View data structure
-dplyr::glimpse(raw_data)
-
-# View first few rows
-head(raw_data)
-```
-
-## Python
-<!-- Python equivalent code would go here -->
-:::
-
-### Step 5: Select and rename key variables  
-
-::: {.panel-tabset}
-
-## R
+## 4. Data Cleaning and Transformation
 
 ```r
 # Clean and prepare the dataset
@@ -155,19 +95,8 @@ clean_data <- raw_data |>
     reprate = consultation_externe_reporting_rate,
     reptime = consultation_externe_reporting_rate_on_time,
     
-    # Outpatient cases
-    allout_u5 = c_ext_nombre_de_nouveaux_cas_toutes_causes_confondues_moins_de_5_ans,
-    allout_ov5 = c_ext_nombre_de_nouveaux_cas_toutes_causes_confondues_5_ans_et_plus_sans_fe,
-    allout_preg = c_ext_nombre_de_nouveaux_cas_toutes_causes_confondues_fe,
+    # [Additional variables organized by category...]
     
-    # Suspected malaria cases
-    susp_u5 = c_ext_nombre_de_cas_suspects_de_paludisme_moins_de_5_ans,
-    susp_ov5 = c_ext_nombre_de_cas_suspects_de_paludisme_5_ans_et_plus_sans_fe,
-    susp_preg = c_ext_nombre_de_cas_suspects_de_paludisme_fe,
-    
-    # Additional variables would go here...
-    # Add all other variables with clear naming
-
     # Prevention indicators 
     iptp1 = smi_nombre_de_femmes_enceintes_ayant_pris_une_dose_de_tpi,
     iptp2 = smi_nombre_de_femmes_enceintes_ayant_pris_deux_doses_de_tpi,
@@ -192,20 +121,24 @@ clean_data <- raw_data |>
   )
 ```
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**What's happening here:**
+- `janitor::clean_names()` standardizes column names to lowercase snake_case
+- `dplyr::select()` both selects and renames variables in one step
+- Variables are grouped by logical categories with comments
+- `tidyr::separate()` splits the period column into month and year
+- `match()` converts French month names to numeric values
+- `as.integer()` ensures proper data types
 
-### Step 6: Detect and replace outliers
+**Why this approach:**
+- Clean, consistent variable names improve code readability
+- Organizing variables by category with comments makes the code self-documenting
+- Using base R pipe (`|>`) makes the data flow explicit
+- Explicit type conversion prevents issues with calculations later
+- Breaking each pipe operation into its own line improves readability
 
-::: {.panel-tabset}
-
-## R
+## 5. Outlier Detection and Replacement
 
 ```r
-# For detailed outlier detection methodology, see:
-# https://ahadi-analytics.github.io/snt-code-library/english/library/data/routine_cases/outlier_correction.html
-
 # Basic example of outlier detection using IQR method
 outlier_detection <- clean_data |>
   # Group by facility for facility-specific thresholds
@@ -229,19 +162,24 @@ corrected_data <- outlier_detection |>
   )
 ```
 
-::: {.callout-tip}
-Apply similar outlier detection to other key variables. Consider your domain knowledge when defining outlier thresholds.
-:::
+**What's happening here:**
+- Using the Interquartile Range (IQR) method to detect outliers
+- For each facility:
+  1. Calculate the median, Q1 (25th percentile), and Q3 (75th percentile)
+  2. Calculate IQR = Q3 - Q1
+  3. Set upper bound = Q3 + 1.5*IQR
+  4. Set lower bound = Q1 - 1.5*IQR
+  5. Flag values outside these bounds as outliers
+- Replace outliers with the facility-specific median
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**Why this approach:**
+- Grouping by facility accounts for different facility sizes and patterns
+- The IQR method is robust to non-normal distributions
+- Using facility-specific medians preserves facility-level patterns
+- `na.rm = TRUE` handles missing values appropriately
+- `ungroup()` prevents unexpected behavior in subsequent operations
 
-### Step 7: Compute new variables
-
-::: {.panel-tabset}
-
-## R
+## 6. Computing New Variables
 
 ```r
 # Add calculated variables
@@ -257,48 +195,7 @@ computed_data <- corrected_data |>
       na.rm = TRUE
     ),
     
-    # === Suspected malaria cases ===
-    susp = sum(
-      dplyr::c_across(
-        c(susp_u5, susp_ov5, susp_preg,
-          susp_u5_chw, susp_ov5_chw, susp_preg_chw)
-      ), 
-      na.rm = TRUE
-    ),
-    
-    # === Community cases ===
-    susp_chw = sum(
-      dplyr::c_across(
-        c(susp_u5_chw, susp_ov5_chw, susp_preg_chw)
-      ), 
-      na.rm = TRUE
-    ),
-    
-    # === Testing totals ===
-    test_u5 = sum(
-      dplyr::c_across(
-        c(test_rdt_u5, test_mic_u5, test_rdt_u5_chw)
-      ), 
-      na.rm = TRUE
-    ),
-    
-    test_ov5 = sum(
-      dplyr::c_across(
-        c(test_rdt_ov5, test_mic_ov5, test_rdt_ov5_chw)
-      ), 
-      na.rm = TRUE
-    ),
-    
-    test_preg = sum(
-      dplyr::c_across(
-        c(test_rdt_preg, test_mic_preg, test_rdt_preg_chw)
-      ), 
-      na.rm = TRUE
-    ),
-    
-    test = sum(test_u5, test_ov5, test_preg, na.rm = TRUE),
-    
-    # === Other totals would continue here... ===
+    # [Additional calculated variables...]
     
     # === Calculate key indicators ===
     test_positivity = if (test > 0) {
@@ -310,32 +207,40 @@ computed_data <- corrected_data |>
   dplyr::ungroup()
 ```
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**What's happening here:**
+- `rowwise()` performs calculations row by row
+- `c_across()` selects multiple columns for operations within `rowwise()`
+- Calculated variables are organized by category
+- Conditional logic (`if (test > 0)`) prevents division by zero
+- `NA_real_` ensures correct data type for missing values
 
-### Step 8: Save the cleaned data
+**Why this approach:**
+- `rowwise()` enables per-row operations across multiple columns
+- Category headers as comments improve readability
+- Handling edge cases (like division by zero) prevents errors
+- `na.rm = TRUE` properly handles missing values in calculations
+- `ungroup()` prevents unexpected behavior in subsequent operations
 
-::: {.panel-tabset}
-
-## R
+## 7. Saving Processed Data
 
 ```r
 # Save as CSV
 readr::write_csv(computed_data, "cleaned_data/facility_level_data.csv")
+
+# Save as Excel (optional)
+writexl::write_xlsx(computed_data, "cleaned_data/facility_level_data.xlsx")
 ```
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**What's happening here:**
+- Saving the processed data in CSV format
+- Optionally saving in Excel format for users who prefer it
 
-### Step 9: Aggregate data by administrative level
+**Why this approach:**
+- CSV files are efficient, portable, and work with many tools
+- Saving to the `cleaned_data` directory keeps files organized
+- Multiple formats accommodate different user preferences
 
-#### Step 9.1: Monthly aggregation
-
-::: {.panel-tabset}
-
-## R
+## 8. Aggregating Data
 
 ```r
 # Monthly aggregation at administrative level 2
@@ -352,19 +257,7 @@ monthly_adm2_data <- computed_data |>
 
 # Save monthly aggregated data
 readr::write_csv(monthly_adm2_data, "aggregated_data/monthly_adm2_data.csv")
-```
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
-
-#### Step 9.2: Annual aggregation
-
-::: {.panel-tabset}
-
-## R
-
-```r
 # Yearly aggregation at administrative level 2
 yearly_adm2_data <- computed_data |>
   dplyr::group_by(adm1, adm2, year) |>
@@ -381,20 +274,17 @@ yearly_adm2_data <- computed_data |>
 readr::write_csv(yearly_adm2_data, "aggregated_data/yearly_adm2_data.csv")
 ```
 
-## Python
-<!-- Python equivalent code would go here -->
-:::
+**What's happening here:**
+- Creating two aggregated datasets:
+  1. Monthly data by administrative level 2
+  2. Yearly data by administrative level 2
+- `across(where(is.numeric), ~ sum(.x, na.rm = TRUE))` sums all numeric columns
+- `.groups = "drop"` removes grouping after summarization
+- Saving the aggregated data to separate files
 
-## Common Mistakes to Avoid  
-
-- Not checking for data inconsistencies before analysis
-- Forgetting to handle missing values with `na.rm = TRUE`
-- Mixing variable naming conventions
-- Overwriting raw data files
-- Not validating outlier replacements against domain knowledge
-
-## Summary and Next Steps
-
-This preprocessing workflow has prepared your DHIS2 data for SNT analysis by cleaning, standardizing, and aggregating the data. 
-
+**Why this approach:**
+- `across()` with `where(is.numeric)` efficiently processes all numeric columns
+- Using `~ sum(.x, na.rm = TRUE)` properly handles missing values
+- Different temporal aggregations support various analysis needs
+- Saving to the `aggregated_data` directory keeps files organized
 
